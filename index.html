@@ -47,55 +47,71 @@ body {
   touch-action: pan-y;
 }
 #maker .inner {
-  height: 100%; max-width: 720px; margin-inline: auto; padding: 14px 12px 12px;
-  display: grid; grid-template-columns: minmax(130px, 38%) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr); column-gap: 18px; row-gap: 10px;
+  height: 100%; max-width: 760px; margin-inline: auto; padding: 12px 14px 14px;
+  display: grid; gap: 12px; align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "head" "pv" "panel" "act";
 }
-#maker header { position: relative; padding-inline: 72px; grid-column: 1 / -1; text-align: center; display: flex; flex-direction: column; gap: 2px; }
-#maker .zh { font: 600 13px/1 var(--f-display), "PingFang HK", "Noto Sans HK", "Microsoft JhengHei", sans-serif; letter-spacing: .5em; color: var(--accent); padding-left: .5em; }
-#maker h1 { margin: 0; font: 700 28px/1.05 var(--f-display); color: var(--ink); text-wrap: balance; }
+#maker header { grid-area: head; position: relative; padding-inline: 64px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+#maker h1 { margin: 0; font: 700 26px/1.05 var(--f-display); color: var(--ink); text-wrap: balance; }
 #maker .sub { font: 500 13px var(--f-display); color: var(--muted); }
-#back { position: absolute; left: 0; top: 2px; min-height: 36px; padding: 0 10px; border: 0; background: none; color: var(--muted); font: 600 15px var(--f-display); cursor: pointer; }
+#back { position: absolute; left: 0; top: 0; min-height: 36px; padding: 0 10px; border: 0; background: none; color: var(--muted); font: 600 15px var(--f-display); cursor: pointer; }
 #back:hover { color: var(--ink); }
-#back:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
-#side { display: flex; flex-direction: column; gap: 8px; align-self: start; min-width: 0; }
-#pv { width: 100%; aspect-ratio: 240 / 230; height: auto; border-radius: 22px; background: var(--stage); box-shadow: 0 6px 18px rgba(150,110,120,.16); }
-#shuffle {
-  min-height: 34px; border: 0; background: none; color: var(--muted); cursor: pointer;
-  font: 600 14px var(--f-display); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line);
+#pv {
+  grid-area: pv; justify-self: center; display: block;
+  width: min(100%, 250px, 29vh * 1.043); aspect-ratio: 240 / 230; height: auto;
+  border-radius: 24px; background: var(--stage); box-shadow: 0 6px 18px rgba(150,110,120,.16);
 }
-#shuffle:hover { color: var(--ink); }
-#panel { display: flex; flex-direction: column; gap: 14px; min-height: 0; min-width: 0; align-self: start; }
-#tabs { display: flex; gap: 2px; padding: 3px; background: #f4e6e6; border-radius: 999px; }
+#panel { grid-area: panel; display: flex; flex-direction: column; gap: 14px; min-height: 0; min-width: 0; }
+#tabs { display: flex; gap: 2px; padding: 3px; background: #f4e6e6; border-radius: 999px; flex: none; }
 .tab {
-  flex: 1 1 0; min-width: 0; min-height: 36px; padding: 4px 0; border: 0; border-radius: 999px; background: none;
-  color: var(--muted); font: 600 12.5px var(--f-display); cursor: pointer; white-space: nowrap; overflow: hidden;
+  flex: 1 1 0; min-width: 0; min-height: 38px; padding: 4px 0; border: 0; border-radius: 999px; background: none;
+  color: var(--muted); font: 600 14px var(--f-display); cursor: pointer; white-space: nowrap;
 }
 .tab[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(150,110,120,.2); }
-@media (max-width: 460px) { #tabs { display: grid; grid-template-columns: 1fr 1fr; border-radius: 18px; } .tab { font-size: 13.5px; } }
-#rows { display: flex; flex-direction: column; gap: 16px; overflow-y: auto; min-height: 0; padding: 2px; touch-action: pan-y; }
+#rows { display: flex; flex-direction: column; gap: 16px; overflow-y: auto; min-height: 0; padding: 2px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
 .row { display: flex; flex-direction: column; gap: 8px; }
 .lab { font: 600 11px var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
-  min-height: 36px; padding: 4px 13px; border-radius: 999px;
+  min-height: 38px; padding: 4px 14px; border-radius: 999px;
   border: 0; background: #f7eded; color: var(--ink);
   font: 600 14px var(--f-display); cursor: pointer;
 }
 .chip:hover { background: #f1e1e1; }
 .chip[aria-pressed="true"] { background: var(--accent); color: #fff; }
 .sw {
-  width: 38px; height: 38px; border-radius: 50%; padding: 0; cursor: pointer;
+  width: 40px; height: 40px; border-radius: 50%; padding: 0; cursor: pointer;
   border: 3px solid #fff; box-shadow: 0 0 0 1.5px var(--line);
 }
 .sw[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent); }
-.chip:focus-visible, .sw:focus-visible, .tab:focus-visible, #go:focus-visible, #shuffle:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.chip:focus-visible, .sw:focus-visible, .tab:focus-visible, #go:focus-visible, #shuffle:focus-visible, #back:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+#actions { grid-area: act; display: flex; align-items: center; gap: 12px; }
+#shuffle {
+  flex: none; min-height: 48px; padding: 0 6px; border: 0; background: none; color: var(--muted); cursor: pointer;
+  font: 600 14px var(--f-display); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line);
+}
+#shuffle:hover { color: var(--ink); }
 #go {
-  width: 100%; min-height: 48px; border: 0; border-radius: 16px;
+  flex: 1; min-height: 50px; border: 0; border-radius: 16px;
   background: var(--accent); color: #fff; font: 700 18px var(--f-display); cursor: pointer;
   box-shadow: 0 4px 0 #b4554c;
 }
 #go:active { transform: translateY(2px); box-shadow: 0 2px 0 #b4554c; }
+@media (max-height: 700px) { #maker .sub { display: none; } }
+@media (min-width: 640px) {
+  #maker .inner {
+    grid-template-columns: minmax(200px, 38%) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: "head head" "pv panel" "act panel";
+    column-gap: 28px; align-content: center;
+  }
+  #pv { width: min(100%, 300px); align-self: start; }
+  #actions { flex-direction: column; align-items: stretch; align-self: start; gap: 6px; }
+  #go { flex: none; }
+  #shuffle { min-height: 36px; }
+}
 
 #pad { display: flex; gap: 10px; height: 64px; flex: none; }
 #pad button {
@@ -118,17 +134,17 @@ body {
       <div class="inner">
         <header>
           <button id="back" type="button">&lsaquo; Back</button>
-          <h1>Dress your waiter</h1>
+          <h1>Your waiter</h1>
           <span class="sub">Pick a look, then start serving</span>
         </header>
-        <div id="side">
-          <canvas id="pv"></canvas>
-          <button id="shuffle" type="button">Surprise me</button>
-          <button id="go" type="button">Start serving</button>
-        </div>
+        <canvas id="pv"></canvas>
         <div id="panel">
           <div id="tabs" role="tablist"></div>
           <div id="rows"></div>
+        </div>
+        <div id="actions">
+          <button id="shuffle" type="button">Surprise me</button>
+          <button id="go" type="button">Start serving</button>
         </div>
       </div>
     </section>
@@ -619,13 +635,10 @@ function drawItem(kind, x, y, ang, fill, alpha, mood) {
     faceItem(0, 6, 1.0, mood);
   } else {
     /* Red and white cow teacup (the cha chaan teng classic): white porcelain, red rim band,
-       red cow patches, and a little cow's ears and horns on the rim. */
+       a printed cow face with a pink muzzle and ears at the rim, like the Friesian cow on the real cups. */
     const CUP = '#d4524c', RED = '#ea6a62', WHT = '#fffdf8';
-    // cow ears and horns peek out behind the rim
+    // cow ears stick out at the rim
     ctx.lineWidth = 2; ctx.strokeStyle = CUP;
-    ctx.fillStyle = '#fff1d6';
-    ctx.beginPath(); ctx.ellipse(-12, -25, 3, 5, -0.3, 0, 7); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(12, -25, 3, 5, 0.3, 0, 7); ctx.fill(); ctx.stroke();
     ctx.fillStyle = RED;
     ctx.beginPath(); ctx.ellipse(-22, -17, 7, 4.2, -0.5, 0, 7); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.ellipse(22, -17, 7, 4.2, 0.5, 0, 7); ctx.fill(); ctx.stroke();
