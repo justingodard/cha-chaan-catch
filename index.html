@@ -254,9 +254,16 @@ const world = engine.world;
 const DT = 1000 / 60;
 const GA = engine.gravity.y * engine.gravity.scale * DT * DT;
 
+const LIP = { w: 8, up: 12 };
 let plate, plateY0;
 (function makePlate() {
-  plate = Bodies.rectangle(W / 2, T.plateY, T.plateW, 10, { friction: 1, frictionStatic: 3, restitution: 0, label: 'plate' });
+  const po = { friction: 1, frictionStatic: 3, restitution: 0 };
+  const lipTop = T.plateY - 5 - LIP.up, lipH = 10 + LIP.up + 0;
+  const lipCY = lipTop + lipH / 2, lipDX = T.plateW / 2 - LIP.w / 2;
+  const base = Bodies.rectangle(W / 2, T.plateY, T.plateW, 10, po);
+  const lipL = Bodies.rectangle(W / 2 - lipDX, lipCY, LIP.w, lipH, po);
+  const lipR = Bodies.rectangle(W / 2 + lipDX, lipCY, LIP.w, lipH, po);
+  plate = Body.create({ parts: [base, lipL, lipR], friction: 1, frictionStatic: 3, restitution: 0, label: 'plate' });
   Body.setMass(plate, 2000);
   Body.setInertia(plate, Infinity);
   plateY0 = plate.position.y;
@@ -346,7 +353,7 @@ function spawn() {
     let ok = true;
     for (const j of items) {
       if (j.caught || j.landAt <= stepCount) continue;
-      const allow = 0.8 * T.maxSpeed * Math.abs(landAt - j.landAt) + T.plateW / 2 - 15;
+      const allow = 0.8 * T.maxSpeed * Math.abs(landAt - j.landAt) + T.plateW / 2 - 26;
       if (Math.abs(cx - j.landX) > allow) { ok = false; break; }
     }
     x = cx;
@@ -937,11 +944,21 @@ function drawWaiter(lk, x, feetY, a) {
   ctx.restore();
 }
 function drawTray(x, y) {
-  ctx.lineWidth = 2; ctx.strokeStyle = C.mintDeep;
+  const hw = T.plateW / 2;
+  const shapes = [
+    [x - hw, y - 5, T.plateW, 10, 5],
+    [x - hw, y - 5 - LIP.up, LIP.w, 10 + LIP.up, 4],
+    [x + hw - LIP.w, y - 5 - LIP.up, LIP.w, 10 + LIP.up, 4]
+  ];
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 4; ctx.strokeStyle = C.mintDeep;
+  shapes.forEach(function (p) { rr(p[0], p[1], p[2], p[3], p[4]); ctx.stroke(); });
   ctx.fillStyle = '#c4e6dc';
-  rr(x - T.plateW / 2, y - 5, T.plateW, 10, 5); ctx.fill(); ctx.stroke();
+  shapes.forEach(function (p) { rr(p[0], p[1], p[2], p[3], p[4]); ctx.fill(); });
   ctx.fillStyle = 'rgba(255,255,255,.55)';
-  rr(x - T.plateW / 2 + 8, y - 3, T.plateW - 16, 2.4, 1.2); ctx.fill();
+  rr(x - hw + LIP.w + 4, y - 3, T.plateW - 2 * LIP.w - 8, 2.4, 1.2); ctx.fill();
+  rr(x - hw + 2.5, y - 5 - LIP.up + 2.5, 2.4, LIP.up + 2, 1.2); ctx.fill();
+  rr(x + hw - 4.9, y - 5 - LIP.up + 2.5, 2.4, LIP.up + 2, 1.2); ctx.fill();
 }
 
 /* =====================================================================
@@ -955,6 +972,40 @@ const RISE = (ST.y0 - MEZZ_Y) / ST.n;
 const RUN = (ST.x1 - ST.x0) / ST.n;
 function treadTop(i) { return ST.y0 - (i + 1) * RISE; }
 function stepIndex(x) { return Math.max(0, Math.min(ST.n - 1, Math.floor((x - ST.x0) / RUN))); }
+
+/* Sticker outline: foreground sprites are drawn to an offscreen layer, then a white silhouette is stamped
+   around them in 8 directions before the sprites go on top. */
+const HALO = '#fffaf5', HALO_R = 3.5;
+function mkSticker(w, h) {
+  function mk() {
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * DPR); c.height = Math.round(h * DPR);
+    const g = c.getContext('2d');
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    return { c: c, g: g };
+  }
+  return { w: w, h: h, fg: mk(), sil: mk() };
+}
+function drawSticker(S, target, fn) {
+  const prev = ctx;
+  S.fg.g.clearRect(0, 0, S.w, S.h);
+  ctx = S.fg.g;
+  try { fn(); } finally { ctx = prev; }
+  const g = S.sil.g;
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'copy';
+  g.drawImage(S.fg.c, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = HALO; g.fillRect(0, 0, S.sil.c.width, S.sil.c.height);
+  g.restore();
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    target.drawImage(S.sil.c, Math.cos(a) * HALO_R, Math.sin(a) * HALO_R, S.w, S.h);
+  }
+  target.drawImage(S.fg.c, 0, 0, S.w, S.h);
+}
+const stkGame = mkSticker(W, H), stkPrev = mkSticker(PVW, PVH);
 
 function layer() {
   const c = document.createElement('canvas');
@@ -1398,20 +1449,22 @@ function draw(t) {
   drawAnim(t);
   ctx.drawImage(bgFront.c, 0, 0, W, H);
 
-  drawWaiter(look, plate.position.x, H - 16, { pvx: pvx, t: t, lean: Math.max(-0.12, Math.min(0.12, pvx * 0.025)) });
-  drawTray(plate.position.x, T.plateY);
-  for (const p of puddles) {
-    ctx.globalAlpha = Math.min(1, p.life / 80) * 0.85;
+  drawSticker(stkGame, ctx, function () {
+    drawWaiter(look, plate.position.x, H - 16, { pvx: pvx, t: t, lean: Math.max(-0.12, Math.min(0.12, pvx * 0.025)) });
+    drawTray(plate.position.x, T.plateY);
+    for (const p of puddles) {
+      ctx.globalAlpha = Math.min(1, p.life / 80) * 0.85;
+      ctx.fillStyle = C.tea;
+      ctx.beginPath(); ctx.ellipse(plate.position.x + p.off, T.plateY - 5, p.r * 1.8, p.r * 0.8, 0, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    for (const b of items) {
+      const mood = b.caught ? ((b.kind === 'tea' && b.fill < 0.35) ? 'sad' : 'happy') : 'o';
+      drawItem(b.kind, b.position.x, b.position.y, b.angle, b.fill, undefined, mood);
+    }
     ctx.fillStyle = C.tea;
-    ctx.beginPath(); ctx.ellipse(plate.position.x + p.off, T.plateY - 5, p.r * 1.8, p.r * 0.8, 0, 0, 7); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  for (const b of items) {
-    const mood = b.caught ? ((b.kind === 'tea' && b.fill < 0.35) ? 'sad' : 'happy') : 'o';
-    drawItem(b.kind, b.position.x, b.position.y, b.angle, b.fill, undefined, mood);
-  }
-  ctx.fillStyle = C.tea;
-  for (const d of drops) { circ(d.x, d.y, d.r); ctx.fill(); }
+    for (const d of drops) { circ(d.x, d.y, d.r); ctx.fill(); }
+  });
 
   ctx.textAlign = 'center';
   for (const p of pops) {
@@ -1445,11 +1498,13 @@ function drawPreview(t) {
   ctx.fillStyle = 'rgba(110,98,112,.12)'; ctx.beginPath(); ctx.ellipse(PVW / 2, 226, 58, 8, 0, 0, 7); ctx.fill();
   const bob = Math.sin(t * 3) * 1.5;
   const feet = 224;
-  drawWaiter(look, PVW / 2, feet, { pvx: 0, t: t, lean: 0, bob: bob });
   const trayY = feet - 164 + bob;
-  drawTray(PVW / 2, trayY);
-  drawItem('bun', PVW / 2 - 52, trayY - 5 - 23, 0, 1, 1, 'happy');
-  drawItem('tea', PVW / 2 + 40, trayY - 5 - 20, 0, 1, 1, 'happy');
+  drawSticker(stkPrev, pctx, function () {
+    drawWaiter(look, PVW / 2, feet, { pvx: 0, t: t, lean: 0, bob: bob });
+    drawTray(PVW / 2, trayY);
+    drawItem('bun', PVW / 2 - 52, trayY - 5 - 23, 0, 1, 1, 'happy');
+    drawItem('tea', PVW / 2 + 40, trayY - 5 - 20, 0, 1, 1, 'happy');
+  });
   ctx = prev;
 }
 
