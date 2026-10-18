@@ -51,10 +51,13 @@ body {
   display: grid; grid-template-columns: minmax(130px, 38%) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr); column-gap: 18px; row-gap: 10px;
 }
-#maker header { grid-column: 1 / -1; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+#maker header { position: relative; padding-inline: 72px; grid-column: 1 / -1; text-align: center; display: flex; flex-direction: column; gap: 2px; }
 #maker .zh { font: 600 13px/1 var(--f-display), "PingFang HK", "Noto Sans HK", "Microsoft JhengHei", sans-serif; letter-spacing: .5em; color: var(--accent); padding-left: .5em; }
 #maker h1 { margin: 0; font: 700 28px/1.05 var(--f-display); color: var(--ink); text-wrap: balance; }
 #maker .sub { font: 500 13px var(--f-display); color: var(--muted); }
+#back { position: absolute; left: 0; top: 2px; min-height: 36px; padding: 0 10px; border: 0; background: none; color: var(--muted); font: 600 15px var(--f-display); cursor: pointer; }
+#back:hover { color: var(--ink); }
+#back:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
 #side { display: flex; flex-direction: column; gap: 8px; align-self: start; min-width: 0; }
 #pv { width: 100%; aspect-ratio: 240 / 230; height: auto; border-radius: 22px; background: var(--stage); box-shadow: 0 6px 18px rgba(150,110,120,.16); }
 #shuffle {
@@ -114,9 +117,9 @@ body {
     <section id="maker" aria-label="Design your waiter">
       <div class="inner">
         <header>
-          <span class="zh">茶餐廳</span>
-          <h1>Cha Chaan Catch</h1>
-          <span class="sub">Dress your waiter, then catch 50 dishes</span>
+          <button id="back" type="button">&lsaquo; Back</button>
+          <h1>Dress your waiter</h1>
+          <span class="sub">Pick a look, then start serving</span>
         </header>
         <div id="side">
           <canvas id="pv"></canvas>
@@ -254,16 +257,25 @@ const world = engine.world;
 const DT = 1000 / 60;
 const GA = engine.gravity.y * engine.gravity.scale * DT * DT;
 
-const LIP = { w: 8, up: 12 };
+const LIP = { r: 26, up: 14, t: 10 };   // curved end: r = horizontal run, up = rise, t = thickness
 let plate, plateY0;
 (function makePlate() {
   const po = { friction: 1, frictionStatic: 3, restitution: 0 };
-  const lipTop = T.plateY - 5 - LIP.up, lipH = 10 + LIP.up + 0;
-  const lipCY = lipTop + lipH / 2, lipDX = T.plateW / 2 - LIP.w / 2;
-  const base = Bodies.rectangle(W / 2, T.plateY, T.plateW, 10, po);
-  const lipL = Bodies.rectangle(W / 2 - lipDX, lipCY, LIP.w, lipH, po);
-  const lipR = Bodies.rectangle(W / 2 + lipDX, lipCY, LIP.w, lipH, po);
-  plate = Body.create({ parts: [base, lipL, lipR], friction: 1, frictionStatic: 3, restitution: 0, label: 'plate' });
+  const hw = T.plateW / 2;
+  const parts = [Bodies.rectangle(W / 2, T.plateY, T.plateW - 2 * LIP.r, 10, po)];
+  [-1, 1].forEach(function (sd) {
+    const P0 = { x: hw - LIP.r, y: 0 }, C1 = { x: hw - 5, y: 0 }, P2 = { x: hw - 5, y: -LIP.up };
+    let prev = P0;
+    for (let i = 1; i <= 3; i++) {
+      const t = i / 3, u = 1 - t;
+      const q = { x: u * u * P0.x + 2 * u * t * C1.x + t * t * P2.x, y: u * u * P0.y + 2 * u * t * C1.y + t * t * P2.y };
+      const dx = q.x - prev.x, dy = q.y - prev.y, len = Math.hypot(dx, dy);
+      const mx = W / 2 + sd * (prev.x + q.x) / 2, my = T.plateY + (prev.y + q.y) / 2;
+      parts.push(Bodies.rectangle(mx, my, len + LIP.t, LIP.t, Object.assign({ angle: Math.atan2(dy, sd * dx) }, po)));
+      prev = q;
+    }
+  });
+  plate = Body.create({ parts: parts, friction: 1, frictionStatic: 3, restitution: 0, label: 'plate' });
   Body.setMass(plate, 2000);
   Body.setInertia(plate, Infinity);
   plateY0 = plate.position.y;
@@ -273,10 +285,10 @@ let plate, plateY0;
 /* ---------- State ---------- */
 const makerEl = document.getElementById('maker');
 const btnW = document.getElementById('bW');
-let state = 'create';           // create | play | over
+let state = 'title';            // title | create | play | over
 let items = [], drops = [], puddles = [], pops = [];
 let spawned = 0, finalCount = 0, elapsed = 0, spawnT = 90, settleT = 0, sinceLast = 0;
-let stepCount = 0, pvx = 0, overAt = 0, best = 0;
+let stepCount = 0, pvx = 0, overAt = 0, titleAt = 0, best = 0;
 const keys = { left: false, right: false };
 try { best = parseInt(localStorage.getItem('chacatch-best2') || '0', 10) || 0; } catch (e) {}
 
@@ -293,6 +305,10 @@ function openMaker() {
   keys.left = false; keys.right = false;
   makerEl.hidden = false; setState('create');
 }
+function toTitle() {
+  keys.left = false; keys.right = false;
+  makerEl.hidden = true; titleAt = performance.now(); setState('title');
+}
 function finish() {
   setState('over'); overAt = performance.now();
   finalCount = 0;
@@ -300,7 +316,9 @@ function finish() {
   if (finalCount > best) { best = finalCount; try { localStorage.setItem('chacatch-best2', String(best)); } catch (e) {} }
 }
 function anyStart() {
-  if (state === 'over' && performance.now() - overAt > 600) start();
+  const now = performance.now();
+  if (state === 'over' && now - overAt > 600) start();
+  else if (state === 'title' && now - titleAt > 300) start();
 }
 
 /* ---------- Items ---------- */
@@ -600,23 +618,40 @@ function drawItem(kind, x, y, ang, fill, alpha, mood) {
     rr(-14, -14, 4, 8, 2); ctx.fill();
     faceItem(0, 6, 1.0, mood);
   } else {
-    /* Cow print teacup: wide rim, tapered bowl, loop handle, little saucer */
-    const CUP = '#6e6270';
-    ctx.lineWidth = 2; ctx.strokeStyle = CUP; ctx.fillStyle = '#fffdf8';
+    /* Red and white cow teacup (the cha chaan teng classic): white porcelain, red rim band,
+       red cow patches, and a little cow's ears and horns on the rim. */
+    const CUP = '#d4524c', RED = '#ea6a62', WHT = '#fffdf8';
+    // cow ears and horns peek out behind the rim
+    ctx.lineWidth = 2; ctx.strokeStyle = CUP;
+    ctx.fillStyle = '#fff1d6';
+    ctx.beginPath(); ctx.ellipse(-12, -25, 3, 5, -0.3, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(12, -25, 3, 5, 0.3, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = RED;
+    ctx.beginPath(); ctx.ellipse(-22, -17, 7, 4.2, -0.5, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(22, -17, 7, 4.2, 0.5, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f8b7b4';
+    ctx.beginPath(); ctx.ellipse(-22, -17, 3.6, 2, -0.5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(22, -17, 3.6, 2, 0.5, 0, 7); ctx.fill();
+    // saucer and handle
+    ctx.lineWidth = 2; ctx.strokeStyle = CUP; ctx.fillStyle = WHT;
     ctx.beginPath(); ctx.ellipse(0, 17.5, 20, 3.4, 0, 0, 7); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = CUP; ctx.lineWidth = 5.5; ctx.beginPath(); ctx.arc(26, -6, 8, -1.5, 1.7); ctx.stroke();
-    ctx.strokeStyle = '#fffdf8'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(26, -6, 8, -1.5, 1.7); ctx.stroke();
-    ctx.lineWidth = 2.2; ctx.strokeStyle = CUP; ctx.fillStyle = '#fffdf8';
+    ctx.strokeStyle = WHT; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(26, -6, 8, -1.5, 1.7); ctx.stroke();
+    // bowl
+    ctx.lineWidth = 2.2; ctx.strokeStyle = CUP; ctx.fillStyle = WHT;
     bowlPath(); ctx.fill(); ctx.stroke();
     ctx.save();
     bowlPath(); ctx.clip();
-    ctx.fillStyle = CUP;
-    ctx.beginPath(); ctx.ellipse(-13, -9, 7, 5, 0.3, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(14, -8, 5, 4, -0.2, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(-12, 13, 5, 5, 0.2, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(12, 12, 5, 4, -0.3, 0, 7); ctx.fill();
+    ctx.fillStyle = RED;
+    ctx.fillRect(-24, -20, 48, 5.5);                 // red rim band
+    ctx.beginPath(); ctx.ellipse(-15, 6, 6, 8, 0.4, 0, 7); ctx.fill();   // cow patches
+    ctx.beginPath(); ctx.ellipse(16, 10, 5, 4, -0.3, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(14, -8, 4, 3, 0.2, 0, 7); ctx.fill();
+    ctx.fillStyle = '#f8b7b4';                          // pink muzzle behind the face
+    ctx.beginPath(); ctx.ellipse(0, 9, 10, 5.5, 0, 0, 7); ctx.fill();
     ctx.restore();
-    ctx.fillStyle = '#f3e7da'; ctx.beginPath(); ctx.ellipse(0, -19, 22, 5, 0, 0, 7); ctx.fill(); ctx.stroke();
+    bowlPath(); ctx.stroke();
+    ctx.fillStyle = '#fbe9e2'; ctx.beginPath(); ctx.ellipse(0, -19, 22, 5, 0, 0, 7); ctx.fill(); ctx.stroke();
     if (fill > 0.02) {
       ctx.fillStyle = C.tea;
       ctx.beginPath(); ctx.ellipse(0, -19, 18 * Math.sqrt(fill), 3.6 * Math.sqrt(fill) + 0.5, 0, 0, 7); ctx.fill();
@@ -945,20 +980,19 @@ function drawWaiter(lk, x, feetY, a) {
 }
 function drawTray(x, y) {
   const hw = T.plateW / 2;
-  const shapes = [
-    [x - hw, y - 5, T.plateW, 10, 5],
-    [x - hw, y - 5 - LIP.up, LIP.w, 10 + LIP.up, 4],
-    [x + hw - LIP.w, y - 5 - LIP.up, LIP.w, 10 + LIP.up, 4]
-  ];
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = 4; ctx.strokeStyle = C.mintDeep;
-  shapes.forEach(function (p) { rr(p[0], p[1], p[2], p[3], p[4]); ctx.stroke(); });
-  ctx.fillStyle = '#c4e6dc';
-  shapes.forEach(function (p) { rr(p[0], p[1], p[2], p[3], p[4]); ctx.fill(); });
-  ctx.fillStyle = 'rgba(255,255,255,.55)';
-  rr(x - hw + LIP.w + 4, y - 3, T.plateW - 2 * LIP.w - 8, 2.4, 1.2); ctx.fill();
-  rr(x - hw + 2.5, y - 5 - LIP.up + 2.5, 2.4, LIP.up + 2, 1.2); ctx.fill();
-  rr(x + hw - 4.9, y - 5 - LIP.up + 2.5, 2.4, LIP.up + 2, 1.2); ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - hw + 5, y - LIP.up);
+  ctx.quadraticCurveTo(x - hw + 5, y, x - hw + LIP.r, y);
+  ctx.lineTo(x + hw - LIP.r, y);
+  ctx.quadraticCurveTo(x + hw - 5, y, x + hw - 5, y - LIP.up);
+  ctx.lineWidth = LIP.t + 4; ctx.strokeStyle = C.mintDeep; ctx.stroke();
+  ctx.lineWidth = LIP.t; ctx.strokeStyle = '#c4e6dc'; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(x - hw + LIP.r + 4, y - 2);
+  ctx.lineTo(x + hw - LIP.r - 4, y - 2);
+  ctx.stroke();
 }
 
 /* =====================================================================
@@ -1053,10 +1087,14 @@ function person(x, y, o) {
   ctx.restore();
 }
 function miniCup(x, y) {
-  ctx.lineWidth = 1.4; ctx.strokeStyle = '#6e6270'; ctx.fillStyle = '#fffdf8';
+  const R = '#d4524c';
+  ctx.lineWidth = 1.4; ctx.strokeStyle = R; ctx.fillStyle = '#fffdf8';
   ctx.beginPath(); ctx.moveTo(x - 8, y - 6); ctx.bezierCurveTo(x - 8, y + 2, x - 5, y + 6, x - 2, y + 6);
   ctx.lineTo(x + 2, y + 6); ctx.bezierCurveTo(x + 5, y + 6, x + 8, y + 2, x + 8, y - 6); ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#6e6270'; circ(x - 3, y - 1, 2.2); ctx.fill(); circ(x + 3, y + 2, 1.8); ctx.fill();
+  ctx.save(); ctx.clip();
+  ctx.fillStyle = '#ea6a62'; ctx.fillRect(x - 9, y - 7, 18, 2.6);
+  circ(x - 3, y + 1, 2.2); ctx.fill(); circ(x + 3.5, y + 3, 1.6); ctx.fill();
+  ctx.restore();
   ctx.beginPath(); ctx.arc(x + 9, y - 1, 3, -1.4, 1.5); ctx.stroke();
 }
 function steam(x, y, f) {
@@ -1448,6 +1486,7 @@ function draw(t) {
   ctx.drawImage(bgBack.c, 0, 0, W, H);
   drawAnim(t);
   ctx.drawImage(bgFront.c, 0, 0, W, H);
+  if (state === 'title') { drawTitle(t); return; }
 
   drawSticker(stkGame, ctx, function () {
     drawWaiter(look, plate.position.x, H - 16, { pvx: pvx, t: t, lean: Math.max(-0.12, Math.min(0.12, pvx * 0.025)) });
@@ -1488,6 +1527,69 @@ function draw(t) {
     ctx.globalAlpha = 1;
     ctx.font = F('500', 14); outlined('Use the Waiter button to restyle', W / 2, 480, '#8a7a88');
   }
+}
+/* ---------- Title screen ---------- */
+const BTN = { start: { x: W / 2 - 120, y: 352, w: 240, h: 64 }, dress: { x: W / 2 - 100, y: 428, w: 200, h: 40 } };
+function bouncy(text, cx, y, t, seed) {
+  let total = 0;
+  const ws = [];
+  for (const ch of text) { const w = ctx.measureText(ch).width; ws.push(w); total += w; }
+  let x = cx - total / 2, i = 0;
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (const ch of text) {
+    const dy = Math.sin(t * 2.6 + i * 0.55 + seed) * 4;
+    ctx.lineWidth = 9; ctx.strokeStyle = '#fffaf5'; ctx.lineJoin = 'round';
+    ctx.strokeText(ch, x, y + dy);
+    ctx.lineWidth = 5; ctx.strokeStyle = '#b4554c';
+    ctx.strokeText(ch, x, y + dy);
+    ctx.fillStyle = '#f08a7e'; ctx.fillText(ch, x, y + dy);
+    x += ws[i]; i++;
+  }
+  ctx.textAlign = prevAlign;
+}
+function pill(r, fill, edge, label, size, color, pulse) {
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(pulse, pulse); ctx.translate(-cx, -cy);
+  ctx.fillStyle = edge; rr(r.x, r.y + 5, r.w, r.h, r.h / 2); ctx.fill();
+  ctx.fillStyle = fill; rr(r.x, r.y, r.w, r.h, r.h / 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; rr(r.x + 14, r.y + 6, r.w - 28, 6, 3); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = F('700', size);
+  ctx.fillStyle = color; ctx.fillText(label, cx, cy + 1);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+const DECO = [['bun', 58, 0.0, 30], ['tea', 424, 0.31, 26], ['tart', 100, 0.57, 34], ['toast', 384, 0.83, 28], ['tea', 36, 0.45, 22], ['bun', 446, 0.12, 24]];
+function drawTitle(t) {
+  ctx.fillStyle = 'rgba(255,247,249,.66)'; ctx.fillRect(0, 0, W, H);
+  // dishes drifting down the sides, like a title-screen attract mode
+  DECO.forEach(function (d, i) {
+    const span = H + 120;
+    const y = ((t * d[3] + d[2] * span) % span) - 60;
+    drawItem(d[0], d[1], y, Math.sin(t * 0.9 + i) * 0.5, 1, 0.9, 'happy');
+  });
+  ctx.textAlign = 'center';
+  ctx.font = FCJK('700', 24);
+  if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '12px';
+  outlined('茶餐廳', W / 2 + 6, 136, '#d9776c');
+  if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '0px';
+  ctx.font = F('700', 76); bouncy('Cha Chaan', W / 2, 214, t, 0);
+  ctx.font = F('700', 92); bouncy('Catch!', W / 2, 296, t, 1.4);
+  ctx.textAlign = 'center';
+  ctx.font = F('600', 16); outlined('50 dishes fall. Keep them on your tray.', W / 2, 330, C.ink);
+  const pulse = 1 + 0.025 * Math.sin(t * 4);
+  pill(BTN.start, '#e9776b', '#b4554c', 'START', 34, '#fff', pulse);
+  pill(BTN.dress, '#fff3f0', '#e8cfd0', 'Dress your waiter', 16, C.ink, 1);
+  if (best > 0) { ctx.textAlign = 'center'; ctx.font = F('700', 15); outlined('Best ' + best + ' of ' + T.total, W / 2, 486, '#8a7a88'); }
+  // the waiter, bobbing with a couple of dishes on the tray
+  const bob = Math.sin(t * 3) * 1.5;
+  drawSticker(stkGame, ctx, function () {
+    drawWaiter(look, W / 2, H - 16, { pvx: 0, t: t, lean: 0, bob: bob });
+    drawTray(W / 2, T.plateY);
+    drawItem('bun', W / 2 - 52, T.plateY - 5 - 23, 0, 1, 1, 'happy');
+    drawItem('tea', W / 2 + 40, T.plateY - 5 - 20, 0, 1, 1, 'happy');
+  });
 }
 function drawPreview(t) {
   const prev = ctx;
@@ -1559,6 +1661,7 @@ function drawPreview(t) {
   });
 })();
 document.getElementById('go').addEventListener('click', function () { start(); });
+document.getElementById('back').addEventListener('click', function () { toTitle(); });
 btnW.addEventListener('click', function () { openMaker(); });
 
 /* ---------- Input ---------- */
@@ -1568,15 +1671,24 @@ function setKey(code, down) {
 }
 window.addEventListener('keydown', function (e) {
   if (state === 'create') return;
+  if (state === 'title' && e.code === 'KeyD') { openMaker(); return; }
   if (['ArrowLeft', 'ArrowRight', 'Space', 'ArrowUp', 'ArrowDown'].indexOf(e.code) >= 0) e.preventDefault();
   if (e.repeat) return;
   if (['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].indexOf(e.code) >= 0) return;
-  if (state === 'over') { anyStart(); return; }
+  if (state === 'over' || state === 'title') { anyStart(); return; }
   setKey(e.code, true);
 });
 window.addEventListener('keyup', function (e) { setKey(e.code, false); });
 window.addEventListener('blur', function () { keys.left = false; keys.right = false; });
-cv.addEventListener('pointerdown', function () { anyStart(); });
+cv.addEventListener('pointerdown', function (e) {
+  if (state === 'title') {
+    const r = cv.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+    const d = BTN.dress;
+    if (x >= d.x && x <= d.x + d.w && y >= d.y && y <= d.y + d.h + 6) { openMaker(); return; }
+  }
+  anyStart();
+});
 
 function hold(id, key) {
   const el = document.getElementById(id);
@@ -1585,7 +1697,7 @@ function hold(id, key) {
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
     el.classList.add('on');
     if (state === 'create') return;
-    if (state === 'over') { anyStart(); return; }
+    if (state === 'over' || state === 'title') { anyStart(); return; }
     keys[key] = true;
   });
   const up = function () { el.classList.remove('on'); keys[key] = false; };
@@ -1605,7 +1717,9 @@ try {
     document.fonts.load('500 14px "Fredoka"')
   ]).then(function () { buildBg(); });
 } catch (e) {}
-setState('create');
+makerEl.hidden = true;
+titleAt = performance.now();
+setState('title');
 let last = performance.now(), acc = 0, firstFrame = true;
 function frame(now) {
   if (firstFrame) { fit(); firstFrame = false; }
